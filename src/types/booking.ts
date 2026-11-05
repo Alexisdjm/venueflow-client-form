@@ -1,0 +1,64 @@
+export type BookingMode = "demo" | "api";
+export type ServiceMode = "INSTANT" | "ESTIMATED" | "CONSULTATION_REQUIRED";
+
+export type Spa = {
+  id: string; slug: string; name: string; address?: string; timezone: string;
+  currency?: string; cancellationPolicy?: string;
+};
+export type Service = {
+  id: string; name: string; description: string; category: string;
+  durationMinutes: number | null; price: number; priceFrom?: boolean; mode: ServiceMode;
+  compatibleWith?: string[];
+};
+export type Professional = {
+  id: string; name: string; specialty: string; serviceIds: string[]; initials: string;
+};
+export type AssignmentMode = "same" | "auto" | "each";
+export type SlotSegment = {
+  serviceId: string; serviceName: string; professionalId: string; professionalName: string;
+  start: string; end: string;
+};
+export type Slot = { start: string; end: string; professionalIds: string[]; segments?: SlotSegment[] };
+export type CustomerDetails = {
+  name: string; nationalId: string; email: string; phone: string;
+  acceptsPolicy: boolean; acceptsPrivacy: boolean;
+};
+export type BookingSelection = {
+  spa: Spa; services: Service[]; professionalId?: string; date: string;
+  slot: Slot; customer: CustomerDetails;
+  assignmentMode?: AssignmentMode;
+  assignments?: Record<string, string>;
+};
+export type BookingRequest = { requestId: string; expiresAt: string };
+export type BookingSummary = {
+  requestId: string; spaName: string; serviceNames: string[];
+  professionalName: string; start: string; expiresAt: string;
+};
+export type VerificationDetails = BookingSummary & {
+  status: "PENDING" | "EXPIRED" | "CANCELLED" | "CONFIRMED";
+  bookingCode?: string; address?: string; total?: number; end?: string; receiptToken?: string;
+};
+export type BookingReceipt = BookingSummary & {
+  status: "CONFIRMED"; bookingCode: string; address?: string;
+  total: number; end: string; receiptToken: string;
+};
+
+export type BookingTheme = {
+  primary: string; secondary: string; radius: string; fontFamily: string;
+  logoUrl?: string;
+};
+
+export type BookingCopy = {
+  title: string; subtitle: string;
+};
+
+export type BookingFormProps = {
+  spaSlug: string;
+  apiBaseUrl?: string;
+  mode: BookingMode;
+  theme?: Partial<BookingTheme>;
+  copy?: Partial<BookingCopy>;
+  api?: import("@/lib/api/booking-api").BookingApi;
+  onBookingConfirmed?: (request: BookingRequest) => void;
+  whatsappNumber?: string;
+};
