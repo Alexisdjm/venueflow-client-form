@@ -1,5 +1,12 @@
 export type BookingMode = "demo" | "api";
 export type ServiceMode = "INSTANT" | "ESTIMATED" | "CONSULTATION_REQUIRED";
+export type UnavailableReason =
+  | "INACTIVE"
+  | "VARIABLE_DURATION"
+  | "INVALID_DURATION"
+  | "VARIABLE_PRICE"
+  | "NO_ACTIVE_PROFESSIONAL";
+export type AppointmentVisitStatus = "CONFIRMED" | "COMPLETED" | "CANCELLED";
 
 export type Spa = {
   id: string; slug: string; name: string; address?: string; timezone: string;
@@ -8,6 +15,9 @@ export type Spa = {
 export type Service = {
   id: string; name: string; description: string; category: string;
   durationMinutes: number | null; price: number; priceFrom?: boolean; mode: ServiceMode;
+  onlineBookable?: boolean;
+  unavailableReason?: UnavailableReason | null;
+  unavailableMessage?: string | null;
   compatibleWith?: string[];
 };
 export type Professional = {
@@ -30,16 +40,28 @@ export type BookingSelection = {
   assignments?: Record<string, string>;
 };
 export type BookingRequest = { requestId: string; expiresAt: string };
+export type BookingAppointment = {
+  id: string;
+  serviceName: string;
+  professionalName: string;
+  start: string;
+  end: string;
+  status: AppointmentVisitStatus;
+  price: number;
+};
 export type BookingSummary = {
   requestId: string; spaName: string; serviceNames: string[];
   professionalName: string; start: string; expiresAt: string;
+  timezone?: string; currency?: string;
 };
 export type VerificationDetails = BookingSummary & {
   status: "PENDING" | "EXPIRED" | "CANCELLED" | "CONFIRMED";
   bookingCode?: string; address?: string; total?: number; end?: string; receiptToken?: string;
+  partiallyCancelled?: boolean;
+  appointments?: BookingAppointment[];
 };
-export type BookingReceipt = BookingSummary & {
-  status: "CONFIRMED"; bookingCode: string; address?: string;
+export type BookingReceipt = VerificationDetails & {
+  status: "CONFIRMED"; bookingCode: string;
   total: number; end: string; receiptToken: string;
 };
 

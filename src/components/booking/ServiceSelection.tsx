@@ -1,12 +1,12 @@
 import type { Service } from "@/types/booking";
+import { bookableOnline, formatMoney } from "@/lib/booking/public-contract";
 import styles from "./booking.module.css";
 
-function money(price: number) {
-  return Number.isInteger(price) ? `$${price}` : `$${price.toFixed(2)}`;
-}
-
-export function bookableOnline(service: Service) {
-  return service.mode === "INSTANT" && service.durationMinutes != null;
+function unavailableLabel(service: Service) {
+  if (service.mode === "CONSULTATION_REQUIRED" || service.unavailableReason === "VARIABLE_PRICE" || service.unavailableReason === "NO_ACTIVE_PROFESSIONAL") {
+    return "Requiere consulta";
+  }
+  return "A evaluar";
 }
 
 export function whatsappUrl(raw?: string) {
@@ -17,7 +17,7 @@ export function whatsappUrl(raw?: string) {
   return `https://wa.me/${phone}?text=${text}`;
 }
 
-export function ServiceSelection({ services, selected, onChange, whatsappNumber }: { services: Service[]; selected: Service[]; onChange: (value: Service[]) => void; whatsappNumber?: string }) {
+export function ServiceSelection({ services, selected, onChange, whatsappNumber, currency = "USD" }: { services: Service[]; selected: Service[]; onChange: (value: Service[]) => void; whatsappNumber?: string; currency?: string }) {
   const contact = whatsappUrl(whatsappNumber);
   function toggle(service: Service) {
     if (!bookableOnline(service)) return;
@@ -42,14 +42,14 @@ export function ServiceSelection({ services, selected, onChange, whatsappNumber 
       <div className={styles.serviceList}>{group.services.map((service) => {
         const online = bookableOnline(service);
         const active = online && selected.some((item) => item.id === service.id);
-        const price = `${service.priceFrom ? "Desde " : ""}${money(service.price)}`;
+        const price = `${service.priceFrom ? "Desde " : ""}${formatMoney(service.price, currency)}`;
         return <button type="button" key={service.id} aria-pressed={active} disabled={!online} onClick={() => toggle(service)} className={`${styles.serviceCard} ${active ? styles.selected : ""} ${online ? "" : styles.unavailable}`}>
           <span className={styles.copy}><strong>{service.name}</strong>{service.description ? <p>{service.description}</p> : null}</span>
-          <span className={styles.meta}><span>{online ? `${service.durationMinutes} min` : "A evaluar"}</span><strong>{price}</strong>{!online && <small>Lo evalúa la profesional</small>}</span>
+          <span className={styles.meta}><span>{online ? `${service.durationMinutes} min` : unavailableLabel(service)}</span><strong>{price}</strong>{!online && <small>{service.unavailableMessage ?? "No se reserva en línea"}</small>}</span>
           <span className={styles.serviceCheck} aria-hidden="true">{active ? "✓" : ""}</span>
         </button>;
       })}</div>
     </section>)}</div> : <p className={styles.empty}>Este spa todavía no tiene servicios publicados.</p>}
-    {services.some((service) => !bookableOnline(service)) && <p className={styles.consultationNote}>Estos servicios no se reservan en línea. La profesional debe evaluar la duración antes de confirmar el horario.{contact && <> <a href={contact} target="_blank" rel="noopener noreferrer">Escríbenos por WhatsApp</a>.</>}</p>}
+    {services.some((service) => !bookableOnline(service)) && <p className={styles.consultationNote}>{[...new Set(services.filter((service) => !bookableOnline(service)).map((service) => service.unavailableMessage).filter(Boolean))].join(" ") || "Estos servicios no se reservan en línea. La profesional debe evaluar la duración o las condiciones antes de confirmar el horario."}{contact && <> <a href={contact} target="_blank" rel="noopener noreferrer">Escríbenos por WhatsApp</a>.</>}</p>}
   </section>;
 }

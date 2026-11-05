@@ -1,8 +1,10 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import type { BookingApi } from "@/lib/api/booking-api";
 import type { BookingReceipt, VerificationDetails } from "@/types/booking";
 import { resolveBookingApi } from "@/lib/booking/resolve-api";
+import { formatWhen, publicErrorMessage, stableIdempotencyKey } from "@/lib/booking/public-contract";
 import { BookingReceiptCard } from "./BookingConfirmation";
 import styles from "./booking.module.css";
 
@@ -11,14 +13,15 @@ function receiptFrom(details: VerificationDetails): BookingReceipt | undefined {
   return { ...details, status: "CONFIRMED", bookingCode: details.bookingCode, end: details.end, total: details.total, receiptToken: details.receiptToken };
 }
 
-export function BookingVerification({ token, mode, apiBaseUrl }: { token: string; mode: "demo" | "api"; apiBaseUrl?: string }) {
-  const api = useMemo(() => resolveBookingApi(mode, apiBaseUrl), [mode, apiBaseUrl]);
+export function BookingVerification({ token, mode, apiBaseUrl, api: injectedApi }: { token: string; mode: "demo" | "api"; apiBaseUrl?: string; api?: BookingApi }) {
+  const api = useMemo(() => resolveBookingApi(mode, apiBaseUrl, injectedApi), [mode, apiBaseUrl, injectedApi]);
   const [details, setDetails] = useState<VerificationDetails>();
   const [error, setError] = useState("");
   const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [confirmKey, setConfirmKey] = useState("");
   useEffect(() => {
-    api.getVerificationDetails(token).then(setDetails).catch((reason) => setError(reason instanceof Error ? reason.message : "Enlace inválido"));
+    api.getVerificationDetails(token).then(setDetails).catch((reason) => setError(publicErrorMessage(reason, "Enlace inválido")));
   }, [api, token]);
   if (error) return <Result title="No pudimos verificar el enlace" text={error} />;
   if (!details) return <Result title="Validando tu enlace…" text="Esto tomará solo un momento." />;
@@ -32,29 +35,41 @@ export function BookingVerification({ token, mode, apiBaseUrl }: { token: string
       await api.cancelConfirmedBooking(receipt.receiptToken);
       setDetails({ ...details, status: "CANCELLED" });
     } catch (reason) {
-      setActionError(reason instanceof Error ? reason.message : "No se pudo cancelar la reserva");
+      setActionError(publicErrorMessage(reason, "No se pudo cancelar la reserva"));
       setBusy(false);
     }
   }} />;
   async function confirm() {
+    if (busy) return;
     setBusy(true);
     setActionError("");
+    const key = confirmKey || stableIdempotencyKey(token);
+    if (!confirmKey) setConfirmKey(key);
     try {
-      setDetails(await api.confirmBooking(token, crypto.randomUUID()));
-      setBusy(false);
+      setDetails(await api.confirmBooking(token, key));
     } catch (reason) {
-      setActionError(reason instanceof Error ? reason.message : "El horario ya no está disponible");
+      const message = publicErrorMessage(reason, "El horario ya no está disponible");
+      if (reason instanceof Error && /otra clave/i.test(reason.message)) {
+        const current = await api.getVerificationDetails(token).catch(() => undefined);
+        if (current?.status === "CONFIRMED") setDetails(current);
+        else setActionError(message);
+      } else {
+        setActionError(message);
+      }
+    } finally {
       setBusy(false);
     }
   }
   async function cancel() {
+    const current = details;
+    if (!current) return;
     setBusy(true);
     setActionError("");
     try {
       await api.cancelBooking(token);
-      setDetails({ ...details, status: "CANCELLED" });
+      setDetails({ ...current, status: "CANCELLED" });
     } catch (reason) {
-      setActionError(reason instanceof Error ? reason.message : "No se pudo cancelar la solicitud");
+      setActionError(publicErrorMessage(reason, "No se pudo cancelar la solicitud"));
       setBusy(false);
     }
   }
@@ -62,7 +77,7 @@ export function BookingVerification({ token, mode, apiBaseUrl }: { token: string
     <span className={styles.eyebrow}>Verificación segura</span>
     <h2>Confirma tu reserva</h2>
     <p>Revisa los datos de tu cita. El horario queda reservado cuando pulsas confirmar.</p>
-    <div className={styles.notice}><strong>{details.spaName}</strong><br />{details.serviceNames.join(" + ")}<br />{details.professionalName}<br />{new Intl.DateTimeFormat("es-VE", { dateStyle: "full", timeStyle: "short" }).format(new Date(details.start))}</div>
+    <div className={styles.notice}><strong>{details.spaName}</strong><br />{details.serviceNames.join(" + ")}<br />{details.professionalName}<br />{formatWhen(details.start, details.timezone)}</div>
     <button type="button" className={styles.primaryButton} disabled={busy} onClick={confirm}>{busy ? "Confirmando…" : "Confirmar reserva"}</button>
     <button type="button" className={styles.textButton} disabled={busy} onClick={cancel}>Cancelar solicitud</button>
     {actionError && <p className={styles.alert} role="alert">{actionError}</p>}

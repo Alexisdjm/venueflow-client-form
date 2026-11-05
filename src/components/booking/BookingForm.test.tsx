@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, jest } from "@jest/globals";
 import { BookingForm } from "./BookingForm";
-import type { BookingApi } from "@/lib/api/booking-api";
+import { BookingApiError, type BookingApi } from "@/lib/api/booking-api";
 
 const spa = { id: "spa", slug: "bella", name: "Bella", timezone: "America/Caracas", cancellationPolicy: "4 horas" };
 const service = { id: "nails", name: "Manicure", description: "Cuidado completo", category: "Uñas", durationMinutes: 60, price: 20, mode: "INSTANT" as const, compatibleWith: [] };
@@ -55,6 +55,17 @@ describe("BookingForm", () => {
     expect(screen.getByRole("button", { name: /Manicure/i })).toBeEnabled();
   });
 
+  it("keeps consultation services visible and explains why they cannot be booked", async () => {
+    const bookingApi = api();
+    bookingApi.getServices = jest.fn().mockResolvedValue([
+      { ...service, mode: "CONSULTATION_REQUIRED", onlineBookable: false, unavailableReason: "VARIABLE_PRICE", unavailableMessage: "El precio requiere evaluación en el spa.", priceFrom: true },
+    ]);
+    render(<BookingForm spaSlug="bella" mode="api" api={bookingApi} />);
+    expect(await screen.findByRole("button", { name: /Manicure/i })).toBeDisabled();
+    expect(screen.getByText("Requiere consulta")).toBeInTheDocument();
+    expect(screen.getAllByText("El precio requiere evaluación en el spa.").length).toBeGreaterThan(0);
+  });
+
   it("asks how to assign professionals when several fixed services are selected", async () => {
     const user = userEvent.setup();
     const bookingApi = api();
@@ -81,5 +92,33 @@ describe("BookingForm", () => {
     await user.selectOptions(screen.getByLabelText("Profesional para Pestañas"), "luz");
     await user.click(screen.getByRole("button", { name: /Continuar/i }));
     expect(await screen.findByLabelText("Fecha de la cita")).toBeInTheDocument();
+  });
+
+  it("resends with the returned capability and surfaces the cooldown", async () => {
+    const user = userEvent.setup();
+    const bookingApi = api();
+    const capability = "11111111-1111-4111-8111-111111111111.resend-capability";
+    bookingApi.createBookingRequest = jest.fn().mockResolvedValue({ requestId: capability, expiresAt: "2030-01-01T00:15:00.000Z" });
+    bookingApi.resendVerification = jest.fn().mockRejectedValue(new BookingApiError("Podrás reenviar el correo en unos segundos.", 429));
+    render(<BookingForm spaSlug="bella" mode="api" api={bookingApi} />);
+    await user.click(await screen.findByRole("button", { name: /Manicure/i }));
+    await user.click(screen.getByRole("button", { name: /Continuar/i }));
+    await user.click(await screen.findByRole("button", { name: /Cualquier profesional/i }));
+    await user.click(screen.getByRole("button", { name: /Continuar/i }));
+    await user.type(screen.getByLabelText("Fecha de la cita"), "2030-05-20");
+    await user.click(await screen.findByRole("button", { name: /Disponible/i }));
+    await user.click(screen.getByRole("button", { name: /Continuar/i }));
+    await user.type(screen.getByLabelText("Nombre completo"), "Ana Perez");
+    await user.type(screen.getByLabelText("Cédula"), "12345678");
+    await user.type(screen.getByLabelText("Teléfono"), "04141234567");
+    await user.type(screen.getByLabelText("Correo electrónico"), "ana@example.com");
+    await user.click(screen.getByRole("checkbox", { name: /política de reservas/i }));
+    await user.click(screen.getByRole("checkbox", { name: /aviso de privacidad/i }));
+    await user.click(screen.getByRole("button", { name: /Continuar/i }));
+    await user.click(screen.getByRole("button", { name: /Solicitar reserva/i }));
+    await user.click(await screen.findByRole("button", { name: "Reenviar correo" }));
+    expect(bookingApi.resendVerification).toHaveBeenCalledWith(capability);
+    expect(screen.queryByText(capability)).not.toBeInTheDocument();
+    expect(await screen.findByText(/Podrás reenviar el correo/i)).toBeInTheDocument();
   });
 });

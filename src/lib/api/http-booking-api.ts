@@ -39,11 +39,20 @@ function bookingBody(selection: BookingSelection) {
 }
 
 async function request<T>(base: string, path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${base.replace(/\/$/, "")}${path}`, {
-    ...init, headers: { "Content-Type": "application/json", ...init?.headers }, cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${base.replace(/\/$/, "")}${path}`, {
+      ...init,
+      headers: { "Content-Type": "application/json", ...init?.headers },
+      cache: "no-store",
+      signal: init?.signal ?? AbortSignal.timeout(20_000),
+    });
+  } catch {
+    throw new BookingApiError("No pudimos conectar. Puedes intentar de nuevo sin crear otra reserva.");
+  }
   const payload = await response.json().catch(() => ({}));
-  const message = Array.isArray(payload.message) ? payload.message.join(". ") : payload.message;
+  const raw = Array.isArray(payload.message) ? payload.message.join(". ") : payload.message;
+  const message = typeof raw === "string" ? raw : undefined;
   if (!response.ok) throw new BookingApiError(message ?? "No se pudo completar la solicitud", response.status, payload.code);
   return payload as T;
 }
@@ -59,7 +68,7 @@ export function createHttpBookingApi(baseUrl: string): BookingApi {
           body: JSON.stringify({
             date: input.date,
             sameProfessional: Boolean(input.sameProfessional),
-            items: (input.items ?? input.serviceIds.map((serviceId) => ({ serviceId }))).map((item) => ({
+            items: (input.items ?? input.serviceIds.map((serviceId) => ({ serviceId }))).map((item: { serviceId: string; professionalId?: string }) => ({
               serviceId: item.serviceId,
               ...(item.professionalId && item.professionalId !== "any" ? { professionalId: item.professionalId } : {}),
             })),
@@ -67,7 +76,7 @@ export function createHttpBookingApi(baseUrl: string): BookingApi {
         })
       : request(baseUrl, `/public/spas/${input.spaSlug}/availability?${new URLSearchParams({ serviceIds: input.serviceIds.join(","), date: input.date, ...(input.professionalId && input.professionalId !== "any" ? { professionalId: input.professionalId } : {}) })}`),
     createBookingRequest: (selection) => request(baseUrl, `/public/booking-requests`, { method: "POST", body: JSON.stringify(bookingBody(selection)) }),
-    resendVerification: (requestId) => request(baseUrl, `/public/booking-requests/${requestId}/resend`, { method: "POST" }),
+    resendVerification: (requestId) => request(baseUrl, `/public/booking-requests/${encodeURIComponent(requestId)}/resend`, { method: "POST" }),
     getVerificationDetails: (token) => request(baseUrl, `/public/booking-verifications/${encodeURIComponent(token)}`),
     confirmBooking: (token, idempotencyKey) => request(baseUrl, `/public/booking-verifications/${encodeURIComponent(token)}/confirm`, { method: "POST", headers: { "Idempotency-Key": idempotencyKey } }),
     cancelBooking: (token) => request(baseUrl, `/public/booking-verifications/${encodeURIComponent(token)}/cancel`, { method: "POST" }),

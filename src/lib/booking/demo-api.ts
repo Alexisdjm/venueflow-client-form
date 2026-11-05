@@ -1,16 +1,16 @@
-import type { BookingApi } from "@/lib/api/booking-api";
+import { BookingApiError, type BookingApi } from "@/lib/api/booking-api";
 import type { BookingReceipt, BookingSelection, Professional, Service, Spa } from "@/types/booking";
 
 const spa: Spa = {
   id: "demo-spa", slug: "atelier-luma", name: "Atelier Luma",
-  address: "Av. Principal, Caracas", timezone: "America/Caracas",
+  address: "Av. Principal, Caracas", timezone: "America/Caracas", currency: "USD",
   cancellationPolicy: "Puedes modificar o cancelar hasta 4 horas antes de tu cita.",
 };
 const services: Service[] = [
-  { id: "nails", name: "Manicure signature", description: "Preparación, cuidado y esmaltado de larga duración.", category: "Uñas", durationMinutes: 60, price: 28, mode: "INSTANT", compatibleWith: ["lashes", "styling"] },
-  { id: "lashes", name: "Lifting de pestañas", description: "Curvatura, nutrición y definición de la mirada.", category: "Cejas y pestañas", durationMinutes: 60, price: 35, mode: "INSTANT", compatibleWith: ["nails", "styling"] },
-  { id: "styling", name: "Secado & styling", description: "Acabado personalizado según textura y largo.", category: "Cabello", durationMinutes: 90, price: 32, mode: "ESTIMATED", compatibleWith: ["nails", "lashes"] },
-  { id: "color", name: "Diagnóstico de color", description: "Evaluación profesional antes de una transformación compleja.", category: "Colorimetría", durationMinutes: 30, price: 15, mode: "CONSULTATION_REQUIRED" },
+  { id: "nails", name: "Manicure signature", description: "Preparación, cuidado y esmaltado de larga duración.", category: "Uñas", durationMinutes: 60, price: 28, mode: "INSTANT", onlineBookable: true, unavailableReason: null, compatibleWith: ["lashes", "styling"] },
+  { id: "lashes", name: "Lifting de pestañas", description: "Curvatura, nutrición y definición de la mirada.", category: "Cejas y pestañas", durationMinutes: 60, price: 35, mode: "INSTANT", onlineBookable: true, unavailableReason: null, compatibleWith: ["nails", "styling"] },
+  { id: "styling", name: "Secado & styling", description: "Acabado personalizado según textura y largo.", category: "Cabello", durationMinutes: null, price: 32, mode: "ESTIMATED", onlineBookable: false, unavailableReason: "VARIABLE_DURATION", unavailableMessage: "La duración requiere evaluación en el spa.", compatibleWith: ["nails", "lashes"] },
+  { id: "color", name: "Diagnóstico de color", description: "Evaluación profesional antes de una transformación compleja.", category: "Colorimetría", durationMinutes: 30, price: 15, priceFrom: true, mode: "CONSULTATION_REQUIRED", onlineBookable: false, unavailableReason: "VARIABLE_PRICE", unavailableMessage: "El precio requiere evaluación en el spa." },
 ];
 const professionals: Professional[] = [
   { id: "any", name: "Cualquier profesional", specialty: "Asignación óptima según disponibilidad", serviceIds: services.map((s) => s.id), initials: "VF" },
@@ -20,6 +20,7 @@ const professionals: Professional[] = [
 ];
 let latest: BookingSelection | undefined;
 let confirmed: BookingReceipt | undefined;
+let confirmedKey = "";
 const cancelled = new Set<string>();
 
 const dayAt = (date: string, hour: number, minute = 0) =>
@@ -69,7 +70,7 @@ export const demoBookingApi: BookingApi = {
   async createBookingRequest(selection) {
     latest = selection;
     confirmed = undefined;
-    return { requestId: "demo-request", expiresAt: new Date(Date.now() + 15 * 60_000).toISOString() };
+    return { requestId: "demo-request.demo-resend-capability", expiresAt: new Date(Date.now() + 15 * 60_000).toISOString() };
   },
   async resendVerification() { return { nextRetryAt: new Date(Date.now() + 60_000).toISOString() }; },
   async cancelBooking(token) {
@@ -86,7 +87,7 @@ export const demoBookingApi: BookingApi = {
   },
   async getVerificationDetails(token) {
     const summary = {
-      requestId: "demo-request", spaName: spa.name,
+      requestId: "demo-request", spaName: spa.name, timezone: spa.timezone, currency: "USD",
       serviceNames: latest?.services.map((s) => s.name) ?? ["Manicure signature", "Secado & styling"],
       professionalName: latest?.slot.segments?.length
         ? [...new Set(latest.slot.segments.map((segment) => segment.professionalName))].join(" · ")
@@ -105,15 +106,37 @@ export const demoBookingApi: BookingApi = {
     }
     return { ...summary, status: "PENDING" as const };
   },
-  async confirmBooking(token) {
-    if (confirmed) return confirmed;
+  async confirmBooking(token, idempotencyKey) {
+    if (confirmed) {
+      if (confirmedKey !== idempotencyKey) throw new BookingApiError("Esta solicitud ya fue confirmada con otra clave.", 409);
+      return confirmed;
+    }
     const detail = await this.getVerificationDetails(token);
-    if (detail.status !== "PENDING") throw new Error("Este enlace ya no puede confirmarse.");
-    const duration = latest?.services.reduce((sum, s) => sum + s.durationMinutes, 0) ?? 150;
+    if (detail.status !== "PENDING") throw new BookingApiError("Este enlace ya no puede confirmarse.", 409);
+    const duration = latest?.services.reduce((sum, service) => sum + (service.durationMinutes ?? 0), 0) || 150;
+    const end = new Date(new Date(detail.start).getTime() + duration * 60_000).toISOString();
+    const priced = latest?.services ?? [];
+    confirmedKey = idempotencyKey;
     confirmed = {
       ...detail, status: "CONFIRMED", bookingCode: "VF-DEMO-2847",
-      address: spa.address, total: latest?.services.reduce((sum, s) => sum + s.price, 0) ?? 60,
-      end: new Date(new Date(detail.start).getTime() + duration * 60000).toISOString(), receiptToken: "demo-receipt",
+      address: spa.address, total: priced.reduce((sum, service) => sum + service.price, 0) || 60,
+      end, receiptToken: "demo-receipt", timezone: spa.timezone, currency: "USD", partiallyCancelled: false,
+      appointments: (latest?.slot.segments ?? [{
+        serviceId: priced[0]?.id ?? "nails",
+        serviceName: priced[0]?.name ?? detail.serviceNames[0] ?? "Manicure signature",
+        professionalId: "ana",
+        professionalName: detail.professionalName,
+        start: detail.start,
+        end,
+      }]).map((segment, index) => ({
+        id: `demo-appointment-${index}`,
+        serviceName: segment.serviceName,
+        professionalName: segment.professionalName,
+        start: segment.start,
+        end: segment.end,
+        status: "CONFIRMED" as const,
+        price: priced.find((service) => service.id === segment.serviceId)?.price ?? 28,
+      })),
     };
     return confirmed;
   },
