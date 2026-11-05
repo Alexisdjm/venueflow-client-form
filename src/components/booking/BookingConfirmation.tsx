@@ -5,6 +5,7 @@ import type { BookingApi } from "@/lib/api/booking-api";
 import type { BookingReceipt } from "@/types/booking";
 import { resolveBookingApi } from "@/lib/booking/resolve-api";
 import { appointmentStatusLabel, formatMoney, formatWhen, publicErrorMessage } from "@/lib/booking/public-contract";
+import { bookingMatchesSpa, type SpaIdentity } from "@/lib/booking/spa-host";
 import styles from "./booking.module.css";
 
 export function BookingReceiptCard({
@@ -48,7 +49,7 @@ export function BookingReceiptCard({
   </main>;
 }
 
-export function BookingConfirmation({ token, mode, apiBaseUrl, api: injectedApi }: { token: string; mode: "demo" | "api"; apiBaseUrl?: string; api?: BookingApi }) {
+export function BookingConfirmation({ token, mode, apiBaseUrl, api: injectedApi, spa }: { token: string; mode: "demo" | "api"; apiBaseUrl?: string; api?: BookingApi; spa: SpaIdentity }) {
   const api = useMemo(() => resolveBookingApi(mode, apiBaseUrl, injectedApi), [mode, apiBaseUrl, injectedApi]);
   const [receipt, setReceipt] = useState<BookingReceipt>();
   const [error, setError] = useState("");
@@ -56,8 +57,11 @@ export function BookingConfirmation({ token, mode, apiBaseUrl, api: injectedApi 
   const [cancelled, setCancelled] = useState(false);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
-    api.getBookingConfirmation(token).then(setReceipt).catch((reason) => setError(publicErrorMessage(reason, "No se pudo abrir el comprobante")));
-  }, [api, token]);
+    api.getBookingConfirmation(token).then((value) => {
+      if (!bookingMatchesSpa(value, spa)) setError("No encontramos esta reserva.");
+      else setReceipt(value);
+    }).catch((reason) => setError(publicErrorMessage(reason, "No se pudo abrir el comprobante")));
+  }, [api, token, spa]);
   if (cancelled) return <main className={styles.verification}><span className={styles.mailIcon}>!</span><h2>Reserva cancelada</h2><p>Enviamos la confirmación de la cancelación a tu correo.</p><Link className={styles.primaryButton} href="/">Hacer otra reserva</Link></main>;
   if (error || !receipt) return <main className={styles.verification}><h2>{error || "Preparando tu comprobante…"}</h2></main>;
   return <BookingReceiptCard receipt={receipt} busy={busy} error={actionError} onCancel={async () => {

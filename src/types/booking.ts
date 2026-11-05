@@ -50,7 +50,7 @@ export type BookingAppointment = {
   price: number;
 };
 export type BookingSummary = {
-  requestId: string; spaName: string; serviceNames: string[];
+  requestId: string; spaName: string; spaSlug?: string; serviceNames: string[];
   professionalName: string; start: string; expiresAt: string;
   timezone?: string; currency?: string;
 };

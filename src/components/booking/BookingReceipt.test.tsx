@@ -57,7 +57,7 @@ describe("booking confirmation contract", () => {
         .mockRejectedValueOnce(new BookingApiError("No pudimos conectar. Puedes intentar de nuevo sin crear otra reserva."))
         .mockResolvedValueOnce(receipt),
     });
-    render(<BookingVerification token="verify-token" mode="api" api={bookingApi} />);
+    render(<BookingVerification token="verify-token" mode="api" api={bookingApi} spa={{ slug: "bella", name: "Bella" }} />);
     await user.click(await screen.findByRole("button", { name: "Confirmar reserva" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/conectar/i);
     await user.click(screen.getByRole("button", { name: "Confirmar reserva" }));
@@ -75,7 +75,7 @@ describe("booking confirmation contract", () => {
         new BookingApiError("No se puede completar esta reserva en línea. Contacta al spa.", 409),
       ),
     });
-    render(<BookingVerification token="identity-token" mode="api" api={bookingApi} />);
+    render(<BookingVerification token="identity-token" mode="api" api={bookingApi} spa={{ slug: "bella", name: "Bella" }} />);
     await user.click(await screen.findByRole("button", { name: "Confirmar reserva" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("No pudimos completar la reserva con los datos proporcionados. Contacta directamente al spa para recibir asistencia.");
   });
@@ -83,18 +83,26 @@ describe("booking confirmation contract", () => {
   it("shows an expired verification link", async () => {
     render(<BookingVerification token="expired" mode="api" api={api({
       getVerificationDetails: jest.fn<() => Promise<VerificationDetails>>().mockRejectedValue(new BookingApiError("Este enlace expiró. Elige el horario otra vez.", 410)),
-    })} />);
+    })} spa={{ slug: "bella", name: "Bella" }} />);
     expect(await screen.findByRole("heading", { name: /no pudimos verificar/i })).toBeInTheDocument();
     expect(screen.getByText(/enlace expiró/i)).toBeInTheDocument();
   });
 
   it("shows the current receipt, including a partial cancellation", async () => {
-    render(<BookingConfirmation token="receipt-token" mode="api" api={api()} />);
+    render(<BookingConfirmation token="receipt-token" mode="api" api={api()} spa={{ slug: "bella", name: "Bella" }} />);
     expect(await screen.findByText("VF-AB12CD34")).toBeInTheDocument();
     expect(screen.getByText(/Parte de la visita fue cancelada/i)).toBeInTheDocument();
     expect(screen.getByText(/Color/)).toHaveTextContent("Cancelada");
     expect(screen.getByText(/Total informado/i)).toHaveTextContent("20,00");
     expect(screen.queryByText(/\$40|40,00/)).not.toBeInTheDocument();
+  });
+
+  it("hides a booking that belongs to another spa", async () => {
+    render(<BookingVerification token="foreign" mode="api" api={api()} spa={{ slug: "emi-nails", name: "EmiNails" }} />);
+    expect(await screen.findByRole("heading", { name: /no pudimos verificar/i })).toBeInTheDocument();
+    expect(screen.queryByText("Bella")).not.toBeInTheDocument();
+    expect(screen.queryByText("Manicure")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Confirmar reserva" })).not.toBeInTheDocument();
   });
 
   it("shows the completed-visit conflict without cancelling", async () => {
@@ -104,7 +112,7 @@ describe("booking confirmation contract", () => {
       ),
     });
     const user = userEvent.setup();
-    render(<BookingConfirmation token="receipt-token" mode="api" api={bookingApi} />);
+    render(<BookingConfirmation token="receipt-token" mode="api" api={bookingApi} spa={{ slug: "bella", name: "Bella" }} />);
     await user.click(await screen.findByRole("button", { name: "Cancelar reserva" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/servicios completados/i);
     await waitFor(() => expect(screen.getByText("VF-AB12CD34")).toBeInTheDocument());

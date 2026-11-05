@@ -5,6 +5,7 @@ import type { BookingApi } from "@/lib/api/booking-api";
 import type { BookingReceipt, VerificationDetails } from "@/types/booking";
 import { resolveBookingApi } from "@/lib/booking/resolve-api";
 import { formatWhen, publicErrorMessage, stableIdempotencyKey } from "@/lib/booking/public-contract";
+import { bookingMatchesSpa, type SpaIdentity } from "@/lib/booking/spa-host";
 import { BookingReceiptCard } from "./BookingConfirmation";
 import styles from "./booking.module.css";
 
@@ -13,7 +14,9 @@ function receiptFrom(details: VerificationDetails): BookingReceipt | undefined {
   return { ...details, status: "CONFIRMED", bookingCode: details.bookingCode, end: details.end, total: details.total, receiptToken: details.receiptToken };
 }
 
-export function BookingVerification({ token, mode, apiBaseUrl, api: injectedApi }: { token: string; mode: "demo" | "api"; apiBaseUrl?: string; api?: BookingApi }) {
+const foreignBooking = "No encontramos esta reserva.";
+
+export function BookingVerification({ token, mode, apiBaseUrl, api: injectedApi, spa }: { token: string; mode: "demo" | "api"; apiBaseUrl?: string; api?: BookingApi; spa: SpaIdentity }) {
   const api = useMemo(() => resolveBookingApi(mode, apiBaseUrl, injectedApi), [mode, apiBaseUrl, injectedApi]);
   const [details, setDetails] = useState<VerificationDetails>();
   const [error, setError] = useState("");
@@ -21,8 +24,11 @@ export function BookingVerification({ token, mode, apiBaseUrl, api: injectedApi 
   const [busy, setBusy] = useState(false);
   const [confirmKey, setConfirmKey] = useState("");
   useEffect(() => {
-    api.getVerificationDetails(token).then(setDetails).catch((reason) => setError(publicErrorMessage(reason, "Enlace inválido")));
-  }, [api, token]);
+    api.getVerificationDetails(token).then((value) => {
+      if (!bookingMatchesSpa(value, spa)) setError(foreignBooking);
+      else setDetails(value);
+    }).catch((reason) => setError(publicErrorMessage(reason, "Enlace inválido")));
+  }, [api, token, spa]);
   if (error) return <Result title="No pudimos verificar el enlace" text={error} />;
   if (!details) return <Result title="Validando tu enlace…" text="Esto tomará solo un momento." />;
   if (details.status === "EXPIRED") return <Result title="Este enlace expiró" text="Regresa al formulario para elegir nuevamente tu horario." />;
@@ -46,7 +52,9 @@ export function BookingVerification({ token, mode, apiBaseUrl, api: injectedApi 
     const key = confirmKey || stableIdempotencyKey(token);
     if (!confirmKey) setConfirmKey(key);
     try {
-      setDetails(await api.confirmBooking(token, key));
+      const confirmed = await api.confirmBooking(token, key);
+      if (!bookingMatchesSpa(confirmed, spa)) setError(foreignBooking);
+      else setDetails(confirmed);
     } catch (reason) {
       const message = publicErrorMessage(reason, "El horario ya no está disponible");
       if (reason instanceof Error && /otra clave/i.test(reason.message)) {
