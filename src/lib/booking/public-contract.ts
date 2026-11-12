@@ -19,7 +19,14 @@ export function formatWhen(value: string, timeZone = "UTC") {
 }
 
 export function formatMoney(amount: number, currency = "USD") {
-  return new Intl.NumberFormat("es-VE", { style: "currency", currency }).format(amount);
+  if (currency === "USDT") {
+    return `USDT ${new Intl.NumberFormat("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)}`;
+  }
+  try {
+    return new Intl.NumberFormat("es-VE", { style: "currency", currency }).format(amount);
+  } catch {
+    return `${currency} ${new Intl.NumberFormat("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)}`;
+  }
 }
 
 export function appointmentStatusLabel(status: string) {
