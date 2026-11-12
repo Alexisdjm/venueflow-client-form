@@ -326,8 +326,8 @@ export function BookingForm({
           pulsa confirmar. Tu horario todavía no está reservado.
         </p>
         <div className={styles.notice}>
-          El enlace solo llega por correo y vence en 15 minutos. Si no lo ves,
-          revisa el spam.
+          El enlace solo llega por correo y vence en 15 minutos. Al confirmar,
+          usaremos este correo para tu reserva. Si no lo ves, revisa el spam.
         </div>
         <button
           type="button"
