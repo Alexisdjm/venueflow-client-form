@@ -35,6 +35,8 @@ const receipt: BookingReceipt = {
 function api(overrides: Partial<BookingApi> = {}): BookingApi {
   return {
     getSpa: jest.fn(),
+    getBookingPolicy: jest.fn(),
+    quoteExchange: jest.fn(),
     getServices: jest.fn(),
     getProfessionals: jest.fn(),
     getAvailability: jest.fn(),

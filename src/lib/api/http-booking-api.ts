@@ -16,6 +16,7 @@ function bookingBody(selection: BookingSelection) {
       start: selection.slot.start,
       customer,
       ...(selection.professionalId && selection.professionalId !== "any" ? { professionalId: selection.professionalId } : {}),
+      ...(selection.payment ? { payment: selection.payment } : {}),
     };
   }
   return {
@@ -24,6 +25,7 @@ function bookingBody(selection: BookingSelection) {
     start: selection.slot.start,
     customer,
     sameProfessional: selection.assignmentMode === "same",
+    ...(selection.payment ? { payment: selection.payment } : {}),
     items: selection.services.map((service) => {
       const chosen = selection.assignmentMode === "same"
         ? selection.professionalId
@@ -60,6 +62,12 @@ async function request<T>(base: string, path: string, init?: RequestInit): Promi
 export function createHttpBookingApi(baseUrl: string): BookingApi {
   return {
     getSpa: (slug) => request(baseUrl, `/public/spas/${slug}`),
+    getBookingPolicy: (slug) => request(baseUrl, `/public/spas/${slug}/booking-policy`),
+    quoteExchange: (input) => request(baseUrl, `/public/exchange-quote?${new URLSearchParams({
+      currency: input.currency,
+      method: input.method,
+      amount: String(input.amount),
+    })}`),
     getServices: (slug) => request(baseUrl, `/public/spas/${slug}/services`),
     getProfessionals: (slug, serviceIds) => request(baseUrl, `/public/spas/${slug}/professionals?serviceIds=${encodeURIComponent(serviceIds.join(","))}`),
     getAvailability: (input) => input.serviceIds.length > 1

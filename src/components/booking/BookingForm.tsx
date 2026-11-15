@@ -6,13 +6,18 @@ import Image from "next/image";
 import type {
   AssignmentMode,
   BookingFormProps,
+  BookingPaymentProof,
+  BookingPolicy,
   BookingRequest,
+  ExchangeQuote,
   CustomerDetails as Customer,
   Professional,
   Service,
   Slot,
   Spa,
 } from "@/types/booking";
+import { quotedDeposit, formatBolivars, formatMoney } from "@/lib/booking/deposit-amount";
+import { compressPaymentImage } from "@/lib/booking/payment-image";
 import { resolveBookingApi } from "@/lib/booking/resolve-api";
 import {
   bookableOnline,
@@ -25,6 +30,7 @@ import { SequenceAssignment } from "./SequenceAssignment";
 import { DateTimeSelection } from "./DateTimeSelection";
 import { CustomerDetails } from "./CustomerDetails";
 import { BookingSummary } from "./BookingSummary";
+import { PaymentStep } from "./PaymentStep";
 import styles from "./booking.module.css";
 
 const initialCustomer: Customer = {
@@ -78,6 +84,12 @@ export function BookingForm({
     [submitting, setSubmitting] = useState(false),
     [error, setError] = useState(""),
     [request, setRequest] = useState<BookingRequest>(),
+    [policy, setPolicy] = useState<BookingPolicy | null>(null),
+    [methodId, setMethodId] = useState(""),
+    [reference, setReference] = useState(""),
+    [proof, setProof] = useState<BookingPaymentProof>(),
+    [proofName, setProofName] = useState(""),
+    [bolivars, setBolivars] = useState<ExchangeQuote | null>(null),
     [resendMessage, setResendMessage] = useState(""),
     [resending, setResending] = useState(false);
   const multiple = selectedServices.length > 1;
@@ -90,9 +102,10 @@ export function BookingForm({
 
   useEffect(() => {
     let active = true;
-    Promise.all([api.getSpa(spaSlug), api.getServices(spaSlug)])
-      .then(([nextSpa, nextServices]) => {
+    Promise.all([api.getSpa(spaSlug), api.getServices(spaSlug), api.getBookingPolicy(spaSlug)])
+      .then(([nextSpa, nextServices, nextPolicy]) => {
         if (!active) return;
+        setPolicy(nextPolicy);
         setCatalog({
           slug: spaSlug,
           spa: nextSpa,
@@ -194,6 +207,38 @@ export function BookingForm({
   const spa = ready?.spa;
   const services = ready?.services ?? [];
   const professional = professionals.find((item) => item.id === professionalId);
+  const depositOn = policy?.deposit.mode === "PERCENT" || policy?.deposit.mode === "FIXED";
+  const stepLabels = depositOn
+    ? ["Servicios", "Profesional", "Fecha y hora", "Tus datos", "Revisar", "Pago"]
+    : ["Servicios", "Profesional", "Fecha y hora", "Tus datos", "Revisar"];
+  const finalStep = stepLabels.length - 1;
+  const quote = policy && spa ? quotedDeposit(policy, selectedServices.map((service) => service.price), spa.currency ?? "USD") : null;
+  const paymentMethod = policy?.methods.find((item) => item.id === methodId) ?? policy?.methods[0];
+  useEffect(() => {
+    if (step !== 5 || !quote || !paymentMethod) return;
+    let active = true;
+    setBolivars(null);
+    api.quoteExchange({ currency: quote.currency, method: paymentMethod.type, amount: quote.amount })
+      .then((value) => {
+        if (active) setBolivars(value);
+      })
+      .catch(() => {
+        if (!active) return;
+        setBolivars({
+          amount: quote.amount,
+          currency: quote.currency,
+          applicable: paymentMethod.type !== "ZELLE" && paymentMethod.type !== "PAYPAL" && quote.currency !== "VES",
+          vesAmount: null,
+          source: null,
+          pair: null,
+          rate: null,
+          quotedAt: null,
+        });
+      });
+    return () => {
+      active = false;
+    };
+  }, [api, step, quote?.amount, quote?.currency, paymentMethod?.id, paymentMethod?.type]);
   function clearSchedule() {
     setDate("");
     setSlots([]);
@@ -252,10 +297,37 @@ export function BookingForm({
     if (step === 2 && !slot)
       return setError("Selecciona una fecha y un horario disponible.");
     if (step === 3 && !validateCustomer()) return;
-    setStep((value) => Math.min(value + 1, 4));
+    setStep((value) => Math.min(value + 1, finalStep));
+  }
+  async function chooseProof(file: File | undefined) {
+    setError("");
+    if (!file) {
+      setProof(undefined);
+      setProofName("");
+      return;
+    }
+    try {
+      setProof(await compressPaymentImage(file));
+      setProofName(file.name);
+    } catch (reason) {
+      setProof(undefined);
+      setProofName("");
+      setError(reason instanceof Error ? reason.message : "No se pudo preparar la imagen.");
+    }
   }
   async function submit() {
-    if (!spa || !slot || !sequenceReady || submitting) return;
+    if (!spa || !slot || !sequenceReady || !policy || submitting) return;
+    const method = policy.methods.find((item) => item.id === methodId) ?? policy.methods[0];
+    let payment;
+    if (policy.deposit.mode !== "NONE") {
+      if (!method) return setError("Este spa no tiene un método de pago activo.");
+      const cleanReference = reference.trim().replace(/\s+/g, " ");
+      if (!/^[A-Za-z0-9 -]{4,40}$/.test(cleanReference)) {
+        return setError("La referencia debe tener entre 4 y 40 caracteres.");
+      }
+      if (method.requiresProof && !proof) return setError("Adjunta la captura del pago.");
+      payment = { methodId: method.id, reference: cleanReference, ...(proof ? { proof } : {}) };
+    }
     setSubmitting(true);
     setError("");
     try {
@@ -268,6 +340,7 @@ export function BookingForm({
         customer,
         assignmentMode: multiple ? assignmentMode : undefined,
         assignments,
+        payment,
       });
       setRequest(value);
       onBookingConfirmed?.(value);
@@ -312,6 +385,24 @@ export function BookingForm({
       <div className={styles.fatal} role="alert">
         <strong>No pudimos abrir las reservas</strong>
         <p>{ready?.error}</p>
+      </div>
+    );
+  if (request?.status === "AWAITING_PAYMENT")
+    return (
+      <div className={styles.verification} style={cssTheme}>
+        <span className={styles.mailIcon}>✦</span>
+        <span className={styles.eyebrow}>Pago recibido</span>
+        <h2>Pendiente de validación</h2>
+        <p>
+          Recibimos tu adelanto de{" "}
+          <strong>{formatMoney(request.depositAmount ?? quote?.amount ?? 0, request.depositCurrency ?? quote?.currency ?? "")}</strong>
+          {request.depositVesAmount != null ? ` (${formatBolivars(request.depositVesAmount)} a tasa ${request.exchangeSource === "BINANCE" ? "Binance" : "BCV"})` : ""}.
+          {" "}{spa?.name} lo revisará y te confirmaremos la cita por correo. El horario queda apartado hasta{" "}
+          {new Intl.DateTimeFormat("es-VE", { dateStyle: "medium", timeStyle: "short", timeZone: spa?.timezone }).format(new Date(request.expiresAt))}.
+        </p>
+        <div className={styles.notice}>
+          La cita todavía no está confirmada. Te escribiremos a <strong>{customer.email.trim()}</strong> cuando el spa valide el pago.
+        </div>
       </div>
     );
   if (request)
@@ -365,7 +456,7 @@ export function BookingForm({
           {mode === "demo" ? "Modo demostración" : "Reservas en línea"}
         </span>
       </header>
-      <BookingStepper step={step} />
+      <BookingStepper step={step} labels={stepLabels} />
       <div className={styles.layout}>
         <main className={styles.panel}>
           {step === 0 && (
@@ -445,6 +536,8 @@ export function BookingForm({
               value={customer}
               onChange={setCustomer}
               errors={errors}
+              description={depositOn ? "La cédula identifica tu historial en el spa. Te escribiremos a este correo cuando validen el pago." : undefined}
+              emailHint={depositOn ? "Te escribiremos a este correo cuando el spa valide el pago." : undefined}
             />
           )}
           {step === 4 && (
@@ -454,7 +547,9 @@ export function BookingForm({
                 <div>
                   <h2>Todo listo para revisar</h2>
                   <p>
-                    Comprueba los detalles antes de solicitar la verificación.
+                    {depositOn
+                      ? "Comprueba los detalles antes de indicar el pago."
+                      : "Comprueba los detalles antes de solicitar la verificación."}
                   </p>
                 </div>
               </div>
@@ -467,6 +562,20 @@ export function BookingForm({
                 compact
               />
             </section>
+          )}
+          {step === 5 && policy && quote && (
+            <PaymentStep
+              policy={policy}
+              amount={quote.amount}
+              currency={quote.currency}
+              methodId={methodId || policy.methods[0]?.id || ""}
+              reference={reference}
+              proofName={proofName}
+              bolivars={bolivars}
+              onMethod={setMethodId}
+              onReference={setReference}
+              onProof={chooseProof}
+            />
           )}
           {error && (
             <p className={styles.alert} role="alert">
@@ -485,7 +594,7 @@ export function BookingForm({
             ) : (
               <span />
             )}
-            {step < 4 ? (
+            {step < finalStep ? (
               <button
                 type="button"
                 className={styles.primaryButton}
@@ -497,10 +606,10 @@ export function BookingForm({
               <button
                 type="button"
                 className={styles.primaryButton}
-                disabled={submitting}
+                disabled={submitting || !policy}
                 onClick={submit}
               >
-                {submitting ? "Solicitando…" : "Solicitar reserva"}
+                {submitting ? "Enviando…" : depositOn ? "Enviar pago" : "Solicitar reserva"}
               </button>
             )}
           </footer>

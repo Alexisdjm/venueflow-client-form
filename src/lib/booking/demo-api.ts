@@ -28,6 +28,12 @@ const dayAt = (date: string, hour: number, minute = 0) =>
 
 export const demoBookingApi: BookingApi = {
   async getSpa() { return spa; },
+  async getBookingPolicy() {
+    return { deposit: { mode: "NONE" as const }, holdMinutes: 240, methods: [] };
+  },
+  async quoteExchange(input) {
+    return { ...input, applicable: false, vesAmount: null, source: null, pair: null, rate: null, quotedAt: null };
+  },
   async getServices() { return services; },
   async getProfessionals(_slug, ids) {
     return professionals.filter((p) => p.id === "any" || ids.every((id) => p.serviceIds.includes(id)));

@@ -10,13 +10,27 @@ const professional = { id: "any", name: "Cualquier profesional", specialty: "Asi
 
 function api(slots = [{ start: "2030-05-20T14:00:00.000Z", end: "2030-05-20T15:00:00.000Z", professionalIds: ["pro"] }]): BookingApi {
   return {
-    getSpa: jest.fn().mockResolvedValue(spa), getServices: jest.fn().mockResolvedValue([service]),
+    getSpa: jest.fn().mockResolvedValue(spa),
+    getBookingPolicy: jest.fn().mockResolvedValue({ deposit: { mode: "NONE" }, holdMinutes: 240, methods: [] }),
+    quoteExchange: jest.fn(),
+    getServices: jest.fn().mockResolvedValue([service]),
     getProfessionals: jest.fn().mockResolvedValue([professional]), getAvailability: jest.fn().mockResolvedValue(slots),
     createBookingRequest: jest.fn(), resendVerification: jest.fn(), getVerificationDetails: jest.fn(), confirmBooking: jest.fn(), cancelBooking: jest.fn(), getBookingConfirmation: jest.fn(), cancelConfirmedBooking: jest.fn(),
   };
 }
 
 describe("BookingForm", () => {
+  it("adds a payment step when the spa asks for a deposit", async () => {
+    const bookingApi = api();
+    bookingApi.getBookingPolicy = jest.fn().mockResolvedValue({
+      deposit: { mode: "PERCENT", percent: 50 },
+      holdMinutes: 240,
+      methods: [{ id: "zelle", type: "ZELLE", label: "Zelle", requiresProof: true, details: { email: "pago@spa.com" } }],
+    });
+    render(<BookingForm spaSlug="bella" mode="api" api={bookingApi} />);
+    expect(await screen.findByText("Pago")).toBeInTheDocument();
+  });
+
   it("navigates through service and professional selection with accessible controls", async () => {
     const user = userEvent.setup();
     render(<BookingForm spaSlug="bella" mode="demo" api={api()} />);

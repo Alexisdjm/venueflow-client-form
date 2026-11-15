@@ -33,13 +33,49 @@ export type CustomerDetails = {
   name: string; nationalId: string; email: string; phone: string;
   acceptsPolicy: boolean; acceptsPrivacy: boolean;
 };
+export type RemotePaymentType = "PAGO_MOVIL" | "ZELLE" | "BINANCE" | "PAYPAL" | "TRANSFER";
+export type BookingPolicy = {
+  deposit:
+    | { mode: "NONE" }
+    | { mode: "PERCENT"; percent: number }
+    | { mode: "FIXED"; amount: number; currency: string };
+  holdMinutes: number;
+  methods: Array<{
+    id: string;
+    type: RemotePaymentType;
+    label: string;
+    requiresProof: boolean;
+    details: Record<string, string>;
+  }>;
+};
+export type BookingPaymentProof = { mime: "image/jpeg" | "image/png" | "image/webp"; data: string };
+export type BookingPayment = { methodId: string; reference: string; proof?: BookingPaymentProof };
+export type ExchangeQuote = {
+  amount: number;
+  currency: string;
+  applicable: boolean;
+  vesAmount: number | null;
+  source: "BCV" | "BINANCE" | null;
+  pair: string | null;
+  rate: number | null;
+  quotedAt: string | null;
+};
 export type BookingSelection = {
   spa: Spa; services: Service[]; professionalId?: string; date: string;
   slot: Slot; customer: CustomerDetails;
   assignmentMode?: AssignmentMode;
   assignments?: Record<string, string>;
+  payment?: BookingPayment;
 };
-export type BookingRequest = { requestId: string; expiresAt: string };
+export type BookingRequest = {
+  requestId: string;
+  expiresAt: string;
+  status?: "PENDING" | "AWAITING_PAYMENT";
+  depositAmount?: number;
+  depositCurrency?: string;
+  depositVesAmount?: number | null;
+  exchangeSource?: "BCV" | "BINANCE" | null;
+};
 export type BookingAppointment = {
   id: string;
   serviceName: string;

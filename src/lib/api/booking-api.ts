@@ -1,10 +1,12 @@
 import type {
-  BookingReceipt, BookingRequest, BookingSelection, Professional,
-  Service, Slot, Spa, VerificationDetails,
+  BookingPolicy, BookingReceipt, BookingRequest, BookingSelection, ExchangeQuote, Professional,
+  RemotePaymentType, Service, Slot, Spa, VerificationDetails,
 } from "@/types/booking";
 
 export interface BookingApi {
   getSpa(spaSlug: string): Promise<Spa>;
+  getBookingPolicy(spaSlug: string): Promise<BookingPolicy>;
+  quoteExchange(input: { currency: string; method: RemotePaymentType; amount: number }): Promise<ExchangeQuote>;
   getServices(spaSlug: string): Promise<Service[]>;
   getProfessionals(spaSlug: string, serviceIds: string[]): Promise<Professional[]>;
   getAvailability(input: {
