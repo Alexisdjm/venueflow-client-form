@@ -1,13 +1,12 @@
-import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { BookingApiError } from "@/lib/api/booking-api";
 import { createHttpBookingApi } from "@/lib/api/http-booking-api";
 import type { Spa } from "@/types/booking";
-import { bookingHostSuffixes, spaSlugFromRequestHeaders } from "./spa-host";
+import { spaSlugFromPath } from "./spa-host";
 
-/** Resolves the spa from the request Host. Never falls back to a configured slug. */
-export async function resolveRequestSpa(): Promise<Spa> {
-  const slug = spaSlugFromRequestHeaders(await headers(), bookingHostSuffixes());
+/** Resolves the spa from the public path. Never falls back to a configured slug. */
+export async function resolveSpaBySlug(value: string): Promise<Spa> {
+  const slug = spaSlugFromPath(value);
   if (!slug) notFound();
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
   if (!baseUrl) notFound();

@@ -15,7 +15,7 @@ npm run lint
 npm run build
 ```
 
-Abre `http://localhost:3002`. El modo predeterminado es `demo` y nunca crea reservas reales. En modo `api`, el spa sale del subdominio: `emi-nails.localhost:3002`.
+Abre `http://localhost:3002`. El modo predeterminado es `demo` y nunca crea reservas reales. En modo `api`, el spa va en la ruta: `http://localhost:3002/emi-nails`. En producción es `https://form.tryvenueflow.com/emi-nails`.
 
 ## Configuración
 
@@ -24,10 +24,9 @@ Copia `.env.example` a `.env.local`:
 ```env
 NEXT_PUBLIC_BOOKING_MODE=demo
 NEXT_PUBLIC_API_BASE_URL=http://localhost:3000/api/v1
-BOOKING_HOST_SUFFIXES=localhost
 ```
 
-En modo `api`, `NEXT_PUBLIC_API_BASE_URL` y `BOOKING_HOST_SUFFIXES` son obligatorios. No hay un slug global de respaldo. El navegador llama a `/api/v1` en su propio host y Next reenvía esa ruta al API. No configures claves de Brevo ni secretos como variables públicas.
+En modo `api`, `NEXT_PUBLIC_API_BASE_URL` es obligatorio. El slug del spa va en la ruta, no en el host. El navegador llama a `/api/v1` en su propio host y Next reenvía esa ruta al API. No configures claves de Brevo ni secretos como variables públicas.
 
 ## Estructura
 

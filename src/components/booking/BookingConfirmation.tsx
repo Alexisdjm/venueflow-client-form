@@ -13,11 +13,13 @@ export function BookingReceiptCard({
   busy,
   error,
   onCancel,
+  homeHref = "/",
 }: {
   receipt: BookingReceipt;
   busy: boolean;
   error: string;
   onCancel: () => void;
+  homeHref?: string;
 }) {
   const when = formatWhen(receipt.start, receipt.timezone);
   const until = formatWhen(receipt.end, receipt.timezone);
@@ -45,7 +47,7 @@ export function BookingReceiptCard({
     <a className={styles.primaryButton} href={`/booking/confirmation/calendar?start=${encodeURIComponent(receipt.start)}&end=${encodeURIComponent(receipt.end)}&title=${encodeURIComponent(`Cita en ${receipt.spaName}`)}`}>Guardar en mi calendario</a>
     <button type="button" className={styles.textButton} disabled={busy} onClick={onCancel}>Cancelar reserva</button>
     {error && <p className={styles.alert} role="alert">{error}</p>}
-    <Link className={styles.textButton} href="/">Hacer otra reserva</Link>
+    <Link className={styles.textButton} href={homeHref}>Hacer otra reserva</Link>
   </main>;
 }
 
@@ -62,9 +64,10 @@ export function BookingConfirmation({ token, mode, apiBaseUrl, api: injectedApi,
       else setReceipt(value);
     }).catch((reason) => setError(publicErrorMessage(reason, "No se pudo abrir el comprobante")));
   }, [api, token, spa]);
-  if (cancelled) return <main className={styles.verification}><span className={styles.mailIcon}>!</span><h2>Reserva cancelada</h2><p>Enviamos la confirmación de la cancelación a tu correo.</p><Link className={styles.primaryButton} href="/">Hacer otra reserva</Link></main>;
+  const homeHref = mode === "api" ? `/${spa.slug}` : "/";
+  if (cancelled) return <main className={styles.verification}><span className={styles.mailIcon}>!</span><h2>Reserva cancelada</h2><p>Enviamos la confirmación de la cancelación a tu correo.</p><Link className={styles.primaryButton} href={homeHref}>Hacer otra reserva</Link></main>;
   if (error || !receipt) return <main className={styles.verification}><h2>{error || "Preparando tu comprobante…"}</h2></main>;
-  return <BookingReceiptCard receipt={receipt} busy={busy} error={actionError} onCancel={async () => {
+  return <BookingReceiptCard homeHref={homeHref} receipt={receipt} busy={busy} error={actionError} onCancel={async () => {
     setBusy(true);
     setActionError("");
     try {

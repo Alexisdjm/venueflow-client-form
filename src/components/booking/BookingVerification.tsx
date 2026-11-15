@@ -23,18 +23,19 @@ export function BookingVerification({ token, mode, apiBaseUrl, api: injectedApi,
   const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirmKey, setConfirmKey] = useState("");
+  const homeHref = mode === "api" ? `/${spa.slug}` : "/";
   useEffect(() => {
     api.getVerificationDetails(token).then((value) => {
       if (!bookingMatchesSpa(value, spa)) setError(foreignBooking);
       else setDetails(value);
     }).catch((reason) => setError(publicErrorMessage(reason, "Enlace inválido")));
   }, [api, token, spa]);
-  if (error) return <Result title="No pudimos verificar el enlace" text={error} />;
+  if (error) return <Result homeHref={homeHref} title="No pudimos verificar el enlace" text={error} />;
   if (!details) return <Result title="Validando tu enlace…" text="Esto tomará solo un momento." />;
-  if (details.status === "EXPIRED") return <Result title="Este enlace expiró" text="Regresa al formulario para elegir nuevamente tu horario." />;
-  if (details.status === "CANCELLED") return <Result title="Esta reserva fue cancelada" text="Si quieres otro horario, vuelve a solicitarlo." />;
+  if (details.status === "EXPIRED") return <Result homeHref={homeHref} title="Este enlace expiró" text="Regresa al formulario para elegir nuevamente tu horario." />;
+  if (details.status === "CANCELLED") return <Result homeHref={homeHref} title="Esta reserva fue cancelada" text="Si quieres otro horario, vuelve a solicitarlo." />;
   const receipt = receiptFrom(details);
-  if (receipt) return <BookingReceiptCard receipt={receipt} busy={busy} error={actionError} onCancel={async () => {
+  if (receipt) return <BookingReceiptCard homeHref={homeHref} receipt={receipt} busy={busy} error={actionError} onCancel={async () => {
     setBusy(true);
     setActionError("");
     try {
@@ -92,6 +93,6 @@ export function BookingVerification({ token, mode, apiBaseUrl, api: injectedApi,
   </main>;
 }
 
-function Result({ title, text }: { title: string; text: string }) {
-  return <main className={styles.verification}><span className={styles.mailIcon}>!</span><h2>{title}</h2><p>{text}</p><Link className={styles.primaryButton} href="/">Volver a reservar</Link></main>;
+function Result({ title, text, homeHref = "/" }: { title: string; text: string; homeHref?: string }) {
+  return <main className={styles.verification}><span className={styles.mailIcon}>!</span><h2>{title}</h2><p>{text}</p><Link className={styles.primaryButton} href={homeHref}>Volver a reservar</Link></main>;
 }
