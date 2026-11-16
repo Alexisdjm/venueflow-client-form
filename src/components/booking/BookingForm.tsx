@@ -6,6 +6,7 @@ import Image from "next/image";
 import type {
   AssignmentMode,
   BookingFormProps,
+  BookingPagoMovilSender,
   BookingPaymentProof,
   BookingPolicy,
   BookingRequest,
@@ -16,6 +17,7 @@ import type {
   Slot,
   Spa,
 } from "@/types/booking";
+import { venezuelanBanks } from "@/lib/venezuelan-banks";
 import { quotedDeposit, formatBolivars, formatMoney } from "@/lib/booking/deposit-amount";
 import { compressPaymentImage } from "@/lib/booking/payment-image";
 import { resolveBookingApi } from "@/lib/booking/resolve-api";
@@ -87,6 +89,7 @@ export function BookingForm({
     [policy, setPolicy] = useState<BookingPolicy | null>(null),
     [methodId, setMethodId] = useState(""),
     [reference, setReference] = useState(""),
+    [pagoMovil, setPagoMovil] = useState<BookingPagoMovilSender>({ nationalId: "", phone: "", bank: "" }),
     [proof, setProof] = useState<BookingPaymentProof>(),
     [proofName, setProofName] = useState(""),
     [bolivars, setBolivars] = useState<ExchangeQuote | null>(null),
@@ -325,8 +328,28 @@ export function BookingForm({
       if (!/^[A-Za-z0-9 -]{4,40}$/.test(cleanReference)) {
         return setError("La referencia debe tener entre 4 y 40 caracteres.");
       }
+      let sender: BookingPagoMovilSender | undefined;
+      if (method.type === "PAGO_MOVIL") {
+        const nationalId = pagoMovil.nationalId.replace(/\D/g, "");
+        const phone = pagoMovil.phone.replace(/\D/g, "");
+        if (!/^\d{7,8}$/.test(nationalId)) {
+          return setError("La cédula del pago móvil debe tener 7 u 8 dígitos.");
+        }
+        if (!/^\d{10,15}$/.test(phone)) {
+          return setError("Usa el teléfono afiliado al pago móvil.");
+        }
+        if (!(venezuelanBanks as readonly string[]).includes(pagoMovil.bank)) {
+          return setError("Elige el banco desde el que pagaste.");
+        }
+        sender = { nationalId, phone, bank: pagoMovil.bank };
+      }
       if (method.requiresProof && !proof) return setError("Adjunta la captura del pago.");
-      payment = { methodId: method.id, reference: cleanReference, ...(proof ? { proof } : {}) };
+      payment = {
+        methodId: method.id,
+        reference: cleanReference,
+        ...(sender ? { pagoMovil: sender } : {}),
+        ...(proof ? { proof } : {}),
+      };
     }
     setSubmitting(true);
     setError("");
@@ -570,10 +593,12 @@ export function BookingForm({
               currency={quote.currency}
               methodId={methodId || policy.methods[0]?.id || ""}
               reference={reference}
+              pagoMovil={pagoMovil}
               proofName={proofName}
               bolivars={bolivars}
               onMethod={setMethodId}
               onReference={setReference}
+              onPagoMovil={setPagoMovil}
               onProof={chooseProof}
             />
           )}

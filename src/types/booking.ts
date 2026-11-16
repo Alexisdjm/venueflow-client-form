@@ -49,7 +49,13 @@ export type BookingPolicy = {
   }>;
 };
 export type BookingPaymentProof = { mime: "image/jpeg" | "image/png" | "image/webp"; data: string };
-export type BookingPayment = { methodId: string; reference: string; proof?: BookingPaymentProof };
+export type BookingPagoMovilSender = { nationalId: string; phone: string; bank: string };
+export type BookingPayment = {
+  methodId: string;
+  reference: string;
+  pagoMovil?: BookingPagoMovilSender;
+  proof?: BookingPaymentProof;
+};
 export type ExchangeQuote = {
   amount: number;
   currency: string;
