@@ -3,6 +3,7 @@ import { bookableOnline, formatMoney } from "@/lib/booking/public-contract";
 import styles from "./booking.module.css";
 
 function unavailableLabel(service: Service) {
+  if (service.unavailableReason === "PACKAGE") return "Por sesiones";
   if (service.mode === "CONSULTATION_REQUIRED" || service.unavailableReason === "VARIABLE_PRICE" || service.unavailableReason === "NO_ACTIVE_PROFESSIONAL") {
     return "Requiere consulta";
   }

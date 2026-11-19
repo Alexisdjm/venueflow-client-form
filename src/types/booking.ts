@@ -5,6 +5,7 @@ export type UnavailableReason =
   | "VARIABLE_DURATION"
   | "INVALID_DURATION"
   | "VARIABLE_PRICE"
+  | "PACKAGE"
   | "NO_ACTIVE_PROFESSIONAL";
 export type AppointmentVisitStatus = "CONFIRMED" | "COMPLETED" | "CANCELLED";
 
