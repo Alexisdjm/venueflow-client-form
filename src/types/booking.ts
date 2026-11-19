@@ -10,7 +10,7 @@ export type AppointmentVisitStatus = "CONFIRMED" | "COMPLETED" | "CANCELLED";
 
 export type Spa = {
   id: string; slug: string; name: string; address?: string; timezone: string;
-  currency?: string; cancellationPolicy?: string;
+  currency?: string; cancellationPolicy?: string; multiService?: boolean;
 };
 export type Service = {
   id: string; name: string; description: string; category: string;

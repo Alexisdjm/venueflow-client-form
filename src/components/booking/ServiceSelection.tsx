@@ -17,12 +17,16 @@ export function whatsappUrl(raw?: string) {
   return `https://wa.me/${phone}?text=${text}`;
 }
 
-export function ServiceSelection({ services, selected, onChange, whatsappNumber, currency = "USD" }: { services: Service[]; selected: Service[]; onChange: (value: Service[]) => void; whatsappNumber?: string; currency?: string }) {
+export function ServiceSelection({ services, selected, onChange, whatsappNumber, currency = "USD", multiService = true }: { services: Service[]; selected: Service[]; onChange: (value: Service[]) => void; whatsappNumber?: string; currency?: string; multiService?: boolean }) {
   const contact = whatsappUrl(whatsappNumber);
   function toggle(service: Service) {
     if (!bookableOnline(service)) return;
     if (selected.some((item) => item.id === service.id)) {
       onChange(selected.filter((item) => item.id !== service.id));
+      return;
+    }
+    if (!multiService) {
+      onChange([service]);
       return;
     }
     const withoutCategory = selected.filter((item) => item.category !== service.category);
@@ -36,9 +40,9 @@ export function ServiceSelection({ services, selected, onChange, whatsappNumber,
     return list;
   }, []);
   return <section aria-labelledby="service-title">
-    <div className={styles.sectionHeading}><span>01</span><div><h2 id="service-title">¿Qué te gustaría reservar?</h2><p>Elige un servicio por categoría. Puedes combinar hasta cinco categorías distintas.</p></div></div>
-    {groups.length ? <div className={styles.categoryList}>{groups.map((group) => <section key={group.category} className={styles.categoryGroup} aria-label={group.category}>
-      <h3>{group.category}</h3>
+    <div className={styles.sectionHeading}><span>01</span><div><h2 id="service-title">¿Qué te gustaría reservar?</h2><p>{multiService ? "Elige un servicio por categoría. Puedes combinar hasta cinco categorías distintas." : "Elige un servicio."}</p></div></div>
+    {groups.length ? <div className={styles.categoryList}>{groups.map((group) => <section key={group.category} className={styles.categoryGroup} aria-label={multiService ? group.category : "Servicios"}>
+      {multiService && <h3>{group.category}</h3>}
       <div className={styles.serviceList}>{group.services.map((service) => {
         const online = bookableOnline(service);
         const active = online && selected.some((item) => item.id === service.id);
@@ -49,7 +53,7 @@ export function ServiceSelection({ services, selected, onChange, whatsappNumber,
           <span className={styles.serviceCheck} aria-hidden="true">{active ? "✓" : ""}</span>
         </button>;
       })}</div>
-    </section>)}</div> : <p className={styles.empty}>Este spa todavía no tiene servicios publicados.</p>}
+    </section>)}</div> : <p className={styles.empty}>Este negocio todavía no tiene servicios publicados.</p>}
     {services.some((service) => !bookableOnline(service)) && <p className={styles.consultationNote}>{[...new Set(services.filter((service) => !bookableOnline(service)).map((service) => service.unavailableMessage).filter(Boolean))].join(" ") || "Estos servicios no se reservan en línea. La profesional debe evaluar la duración o las condiciones antes de confirmar el horario."}{contact && <> <a href={contact} target="_blank" rel="noopener noreferrer">Escríbenos por WhatsApp</a>.</>}</p>}
   </section>;
 }

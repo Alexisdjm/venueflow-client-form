@@ -498,6 +498,7 @@ export function BookingForm({
                 onChange={changeServices}
                 whatsappNumber={whatsappNumber}
                 currency={spa.currency}
+                multiService={spa.multiService !== false}
               />
             </>
           )}
